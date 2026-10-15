@@ -15,6 +15,10 @@ mkdir -p "$SKILL_DIR/scripts" "$BIN_DIR"
 cp "$PROJECT_DIR/SKILL.md" "$SKILL_DIR/SKILL.md"
 cp "$PROJECT_DIR/requirements.txt" "$SKILL_DIR/requirements.txt"
 cp "$PROJECT_DIR/scripts/video_dl.py" "$SKILL_DIR/scripts/video_dl.py"
+cp "$PROJECT_DIR/scripts/douyin_archive.py" "$SKILL_DIR/scripts/douyin_archive.py"
+cp "$PROJECT_DIR/LICENSE" "$SKILL_DIR/LICENSE"
+mkdir -p "$SKILL_DIR/references"
+cp "$PROJECT_DIR/references/"*.md "$SKILL_DIR/references/"
 chmod +x "$SKILL_DIR/scripts/video_dl.py"
 
 cat > "$BIN_DIR/video-dl" <<EOF

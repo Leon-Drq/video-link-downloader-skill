@@ -19,7 +19,6 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
-from playwright.sync_api import sync_playwright
 
 
 SITE = "https://sph.miuistore.com"
@@ -55,6 +54,8 @@ def choose_path(out: str | None, title: str, suffix: str = ".mp4") -> Path:
 
 
 def browser() -> tuple:
+    from playwright.sync_api import sync_playwright
+
     pw = sync_playwright().start()
     instance = pw.chromium.launch(channel="chrome", headless=True)
     page = instance.new_page(user_agent=UA)
@@ -99,43 +100,24 @@ def download_weixin(data: dict, target: Path) -> None:
                 output.write(chunk)
 
 
-def resolve_douyin_via_site(text: str) -> str:
-    pw, instance, page = browser()
-    try:
-        page.goto(SITE + "/sph/public/dy", wait_until="domcontentloaded", timeout=60_000)
-        page.locator("input.search-input").fill(text)
-        with page.expect_response(lambda r: "/sph/public/dy-check?" in r.url, timeout=60_000) as event:
-            page.locator("button.btn-go-dy").click(force=True)
-        data = event.value.json()
-        if data.get("error") != 0:
-            raise RuntimeError(data.get("message") or f"抖音解析失败：{data}")
-        return data["url"]
-    finally:
-        instance.close()
-        pw.stop()
-
-
 def download_douyin(text: str, out: str | None, info_only: bool) -> Path | None:
-    yt_dlp = shutil.which("yt-dlp")
-    if not yt_dlp:
-        raise RuntimeError("未找到 yt-dlp，请先安装：python3 -m pip install -U yt-dlp")
-    source = text
-    template = str(Path(out).expanduser()) if out else "%(title).120B [%(id)s].%(ext)s"
-    if out and (Path(out).expanduser().is_dir() or not Path(out).expanduser().suffix):
-        directory = Path(out).expanduser()
-        directory.mkdir(parents=True, exist_ok=True)
-        template = str(directory / "%(title).120B [%(id)s].%(ext)s")
-    if info_only:
-        command = [yt_dlp, "--dump-single-json", "--no-playlist", source]
-    else:
-        command = [yt_dlp, "--no-playlist", "--newline", "-o", template, source]
-    result = subprocess.run(command, text=True)
-    if result.returncode == 0:
-        return None
-    resolved = resolve_douyin_via_site(text)
-    command[-1] = resolved
-    subprocess.run(command, check=True)
-    return None
+    # Sibling module import also works when this file is loaded through importlib.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import douyin_archive as dy
+
+    with requests.Session() as session:
+        session.headers['User-Agent'] = UA
+        data = dy.resolve(session, text)
+        print(json.dumps(dy.public_info(data), ensure_ascii=False, indent=2))
+        if info_only:
+            return None
+        if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):
+            raise RuntimeError('抖音下载需要 FFmpeg 和 ffprobe；可通过 douyin_archive.py 指定路径')
+        target = choose_path(out, dy.safe_name(data['title']) + '-' + data['id'])
+        metadata = dy.download(session, data, target, 'ffmpeg', 'ffprobe')
+        print(json.dumps(metadata, ensure_ascii=False))
+        print(f'已下载并校验：{target.resolve()}')
+        return target
 
 
 def main() -> int:
